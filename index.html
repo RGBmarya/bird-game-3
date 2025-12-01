@@ -733,7 +733,7 @@
         }
 
         // --- Entity Creation ---
-        function createBullet() {
+        function createBullet(playSound = true) {
             const w = player.weapon;
             const fireAngle = mouse.angle + (Math.random() - 0.5) * w.spread;
             
@@ -753,8 +753,8 @@
             };
             bullets.push(bullet);
             
-            // Play corresponding shoot sound
-            if (synths.shoot[player.name]) {
+            // Play corresponding shoot sound (only once per shot, not per bullet)
+            if (playSound && synths.shoot[player.name]) {
                 // NoiseSynth (owl, woodpecker) only takes duration, not a note
                 if (player.name === 'owl' || player.name === 'woodpecker') {
                     synths.shoot[player.name].triggerAttackRelease("64n");
@@ -944,7 +944,7 @@
             if (isFiring && player.fireCooldown <= 0 && !player.isChanneling) {
                 const bulletCount = player.weapon.bulletCount || 1;
                 for (let i = 0; i < bulletCount; i++) {
-                    createBullet();
+                    createBullet(i === 0); // Only play sound on first bullet
                 }
                 player.fireCooldown = player.weapon.fireRate;
             }
