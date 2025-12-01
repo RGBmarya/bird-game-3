@@ -1,0 +1,1443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bird Game III: The Worm-ageddon</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Tone.js for Audio -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+    
+    <!-- Google Fonts: Pixelated font for game text, Inter for UI -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Press+Start+2P&display=swap" rel="stylesheet">
+    
+    <style>
+        /* Custom styles */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827; /* bg-gray-900 */
+        }
+        
+        .font-pixel {
+            font-family: 'Press Start 2P', cursive;
+        }
+
+        /* Custom text shadow for "DOOM" like effect */
+        .text-doom {
+            text-shadow: 0 0 5px #fff, 0 0 10px #fff, 0 0 15px #f00, 0 0 20px #f00, 0 0 25px #f00, 0 0 30px #f00, 0 0 35px #f00;
+        }
+        
+        .text-doom-sm {
+            text-shadow: 0 0 3px #f00, 0 0 5px #f00;
+        }
+
+        /* Ensure canvas is sharp on all displays */
+        canvas {
+            image-rendering: -moz-crisp-edges;
+            image-rendering: -webkit-crisp-edges;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+
+        /* Custom progress bar for health/ability */
+        progress {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            border: none;
+        }
+        
+        /* Health bar (green) */
+        progress[value].health::-webkit-progress-bar {
+            background-color: #4b5563; /* bg-gray-600 */
+            border-radius: 0.25rem; /* rounded */
+        }
+        progress[value].health::-webkit-progress-value {
+            background-color: #22c55e; /* bg-green-500 */
+            border-radius: 0.25rem;
+            transition: width 0.2s ease;
+        }
+        
+        /* Ability bar (blue) */
+        progress[value].ability::-webkit-progress-bar {
+            background-color: #4b5563; /* bg-gray-600 */
+            border-radius: 0.25rem;
+        }
+        progress[value].ability::-webkit-progress-value {
+            background-color: #3b82f6; /* bg-blue-500 */
+            border-radius: 0.25rem;
+            transition: width 0.1s linear;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 overflow-hidden">
+
+    <!-- Game Container -->
+    <div id="game-container" class="fixed inset-0 w-full h-full bg-black overflow-hidden">
+        
+        <!-- Game Canvas -->
+        <canvas id="game-canvas" class="absolute inset-0 w-full h-full"></canvas>
+
+        <!-- UI Overlay -->
+        <div id="ui-overlay" class="absolute inset-0 p-4 md:p-6 pointer-events-none flex flex-col justify-between text-white">
+            
+            <!-- Top-left UI: Controls Helper -->
+            <div class="absolute top-4 left-4 md:top-6 md:left-6 opacity-60 font-pixel text-xs text-gray-300" style="text-shadow: 1px 1px 2px #111;">
+                <div>[WASD] / [ARROWS] - MOVE</div>
+                <div>[MOUSE] - AIM</div>
+                <div>[LEFT CLICK] - FIRE</div>
+                <div>[SPACE] - ABILITY</div>
+            </div>
+
+            <!-- Top UI: Score -->
+            <div class="flex justify-center">
+                <div class="font-pixel text-lg md:text-3xl text-red-500 text-doom-sm">
+                    SCORE: <span id="score">0</span>
+                </div>
+            </div>
+
+            <!-- Bottom UI: Health and Ability -->
+            <div class="flex justify-between items-end space-x-4">
+                
+                <!-- Health Bar -->
+                <div class="w-1/3">
+                    <label for="health-bar" class="font-pixel text-sm md:text-lg text-green-400">HEALTH</label>
+                    <progress id="health-bar" value="100" max="100" class="w-full h-4 md:h-6 rounded health"></progress>
+                </div>
+
+                <!-- Ability Status -->
+                <div class="w-1/3 text-center">
+                     <span id="ability-ready-text" class="font-pixel text-lg md:text-2xl text-blue-400">ABILITY READY</span>
+                     <label for="ability-bar" class="font-pixel text-sm md:text-lg text-blue-400 block">
+                        [SPACE]
+                     </label>
+                    <progress id="ability-bar" value="100" max="100" class="w-full h-3 md:h-4 rounded ability"></progress>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Container -->
+        <div id="modal-container" class="absolute inset-0 bg-black bg-opacity-75 backdrop-blur-sm flex items-center justify-center p-4">
+            
+            <!-- Start Screen Modal -->
+            <div id="start-modal" class="text-white text-center w-full max-w-6xl overflow-y-auto max-h-full py-8">
+                <h1 class="font-pixel text-4xl md:text-6xl text-red-600 text-doom">BIRD GAME III</h1>
+                <h2 class="font-pixel text-xl md:text-3xl text-red-400 text-doom-sm mt-2">THE WORM-AGEDDON</h2>
+                <p class="mt-4 text-lg text-gray-300">The Annelid Empire has burst forth. They will be sent back in pieces.</p>
+                <p class="mt-4 font-bold text-xl text-white">CHOOSE YOUR AVIARY:</p>
+
+                <!-- Class Selection - 3 columns on medium, 2 rows -->
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4 mt-6 px-2">
+                    <!-- Falcon -->
+                    <button class="bird-class-btn p-3 md:p-4 bg-gray-800 border-2 border-gray-700 rounded-lg hover:bg-red-900 hover:border-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all flex flex-col items-center" data-class="falcon">
+                        <span class="text-4xl md:text-5xl">🦅</span>
+                        <h3 class="font-pixel text-sm md:text-base mt-2 text-yellow-400">FALCON</h3>
+                        <p class="text-xs md:text-sm mt-1 text-gray-300 leading-tight">High-speed sniper. Fires a devastating rail-slug.</p>
+                        <p class="text-xs mt-1 text-cyan-400 font-semibold">Ability: Supersonic Stoop</p>
+                    </button>
+                    <!-- Owl -->
+                    <button class="bird-class-btn p-3 md:p-4 bg-gray-800 border-2 border-gray-700 rounded-lg hover:bg-red-900 hover:border-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all flex flex-col items-center" data-class="owl">
+                        <span class="text-4xl md:text-5xl">🦉</span>
+                        <h3 class="font-pixel text-sm md:text-base mt-2 text-yellow-400">OWL</h3>
+                        <p class="text-xs md:text-sm mt-1 text-gray-300 leading-tight">Ambush predator. Short-range sonic screech.</p>
+                        <p class="text-xs mt-1 text-cyan-400 font-semibold">Ability: Shadow Cloak</p>
+                    </button>
+                    <!-- Hummingbird -->
+                    <button class="bird-class-btn p-3 md:p-4 bg-gray-800 border-2 border-gray-700 rounded-lg hover:bg-red-900 hover:border-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all flex flex-col items-center" data-class="hummingbird">
+                        <span class="text-4xl md:text-5xl">💨</span>
+                        <h3 class="font-pixel text-sm md:text-base mt-2 text-yellow-400">HUMMINGBIRD</h3>
+                        <p class="text-xs md:text-sm mt-1 text-gray-300 leading-tight">Aerial assault. Rapid stream of seeds.</p>
+                        <p class="text-xs mt-1 text-cyan-400 font-semibold">Ability: Hover Strafe</p>
+                    </button>
+                    <!-- Pelican -->
+                    <button class="bird-class-btn p-3 md:p-4 bg-gray-800 border-2 border-gray-700 rounded-lg hover:bg-red-900 hover:border-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all flex flex-col items-center" data-class="pelican">
+                        <span class="text-4xl md:text-5xl">🦢</span>
+                        <h3 class="font-pixel text-sm md:text-base mt-2 text-yellow-400">PELICAN</h3>
+                        <p class="text-xs md:text-sm mt-1 text-gray-300 leading-tight">Heavy demolitions. Explosive guano-bombs.</p>
+                        <p class="text-xs mt-1 text-cyan-400 font-semibold">Ability: Gulp (heal)</p>
+                    </button>
+                    <!-- Crow -->
+                    <button class="bird-class-btn p-3 md:p-4 bg-gray-800 border-2 border-gray-700 rounded-lg hover:bg-red-900 hover:border-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all flex flex-col items-center" data-class="crow">
+                        <span class="text-4xl md:text-5xl">🐦‍⬛</span>
+                        <h3 class="font-pixel text-sm md:text-base mt-2 text-yellow-400">CROW</h3>
+                        <p class="text-xs md:text-sm mt-1 text-gray-300 leading-tight">Trickster. Slow, homing hex-feathers.</p>
+                        <p class="text-xs mt-1 text-cyan-400 font-semibold">Ability: Summon Murder</p>
+                    </button>
+                    <!-- Woodpecker -->
+                    <button class="bird-class-btn p-3 md:p-4 bg-gray-800 border-2 border-gray-700 rounded-lg hover:bg-red-900 hover:border-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all flex flex-col items-center" data-class="woodpecker">
+                        <span class="text-4xl md:text-5xl">🐦</span>
+                        <h3 class="font-pixel text-sm md:text-base mt-2 text-yellow-400">WOODPECKER</h3>
+                        <p class="text-xs md:text-sm mt-1 text-gray-300 leading-tight">Berserker. Rapid-fire melee peck.</p>
+                        <p class="text-xs mt-1 text-cyan-400 font-semibold">Ability: Drum Solo (360°)</p>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Game Over Modal -->
+            <div id="game-over-modal" class="hidden text-white text-center">
+                <h1 class="font-pixel text-4xl md:text-7xl text-red-600 text-doom">YOU ARE PECKED</h1>
+                <p class="font-pixel text-2xl mt-4">FINAL SCORE: <span id="final-score" class="text-yellow-400">0</span></p>
+                <button id="restart-button" class="mt-8 font-pixel text-2xl bg-red-700 text-white py-4 px-8 rounded-lg hover:bg-red-600 border-b-4 border-red-900 active:border-b-0">
+                    RETRY THE PECKONING
+                </button>
+            </div>
+
+        </div>
+
+    </div>
+
+    <script>
+        // --- DOM Elements ---
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        const modalContainer = document.getElementById('modal-container');
+        const startModal = document.getElementById('start-modal');
+        const gameOverModal = document.getElementById('game-over-modal');
+        const classButtons = document.querySelectorAll('.bird-class-btn');
+        const restartButton = document.getElementById('restart-button');
+        const scoreEl = document.getElementById('score');
+        const finalScoreEl = document.getElementById('final-score');
+        const healthBar = document.getElementById('health-bar');
+        const abilityBar = document.getElementById('ability-bar');
+        const abilityReadyText = document.getElementById('ability-ready-text');
+
+        // --- Game State ---
+        let isPlaying = false;
+        let score = 0;
+        let lastTime = 0;
+        let gameTime = 0;
+        let isFiring = false;
+        let keys = {};
+        let mouse = { x: 0, y: 0, angle: 0 };
+        let player = {};
+        let bullets = [];
+        let enemies = [];
+        let particles = [];
+        let powerUps = [];
+        let shockwaves = [];
+        let minions = []; // <-- ADDED FOR CROW ABILITY
+
+        let screenShake = { trauma: 0, x: 0, y: 0 };
+        
+        let enemySpawnTimer = 0;
+        let enemySpawnInterval = 2; // Initial spawn interval in seconds
+
+        // --- Audio Synths (Tone.js) ---
+        let audioInitialized = false;
+        let synths = {};
+
+        function initAudio() {
+            if (audioInitialized) return;
+            
+            // Reverb for atmosphere
+            const reverb = new Tone.Reverb(1.5).toDestination();
+
+            // Industrial Kick
+            synths.kick = new Tone.MembraneSynth({
+                octaves: 4,
+                pitchDecay: 0.1,
+                envelope: { attack: 0.001, decay: 0.2, sustain: 0.01, release: 0.2 }
+            }).toDestination();
+
+            // Industrial Bass
+            synths.bass = new Tone.MonoSynth({
+                volume: -8,
+                oscillator: { type: "sawtooth" },
+                filter: { Q: 2, type: "lowpass", cutoff: 400 },
+                envelope: { attack: 0.01, decay: 0.1, sustain: 0.1, release: 0.2 }
+            }).connect(reverb);
+            
+            // Player Hit
+            synths.playerHit = new Tone.NoiseSynth({
+                noise: { type: "brown" },
+                envelope: { attack: 0.01, decay: 0.15, sustain: 0 }
+            }).toDestination();
+            
+            // Enemy Hit
+            synths.enemyHit = new Tone.Synth({
+                volume: -15,
+                oscillator: { type: "square" },
+                envelope: { attack: 0.01, decay: 0.05, sustain: 0, release: 0.1 }
+            }).toDestination();
+            
+            // Enemy Die
+            synths.enemyDie = new Tone.MetalSynth({
+                volume: -10,
+                frequency: 50,
+                envelope: { attack: 0.01, decay: 0.2, release: 0.1 },
+                harmonicity: 3.1,
+                modulationIndex: 16,
+                resonance: 1500,
+                octaves: 0.5
+            }).toDestination();
+            
+            // Powerup
+            synths.powerUp = new Tone.Synth({
+                oscillator: { type: "triangle" },
+                envelope: { attack: 0.01, decay: 0.2, sustain: 0.1, release: 0.2 }
+            }).toDestination();
+            
+            // Player Shoot (will be customized per class)
+            synths.shoot = {};
+            
+            // Falcon Rail
+            synths.shoot.falcon = new Tone.MetalSynth({
+                volume: -12,
+                frequency: 400,
+                envelope: { attack: 0.001, decay: 0.2, release: 0.1 },
+                harmonicity: 1.1,
+                modulationIndex: 10,
+                resonance: 4000,
+                octaves: 1.5
+            }).toDestination();
+            
+            // Owl Screech
+            synths.shoot.owl = new Tone.NoiseSynth({
+                volume: -10,
+                noise: { type: "white", playbackRate: 0.5 },
+                envelope: { attack: 0.01, decay: 0.1, sustain: 0 }
+            }).toDestination();
+            
+            // Hummingbird Gatling
+            synths.shoot.hummingbird = new Tone.MembraneSynth({
+                volume: -20,
+                pitchDecay: 0.01,
+                octaves: 6,
+                oscillator: { type: "sawtooth" },
+                envelope: { attack: 0.001, decay: 0.05, sustain: 0.01, release: 0.05 }
+            }).toDestination();
+            
+            // Pelican Launcher
+            synths.shoot.pelican = new Tone.MembraneSynth({
+                volume: -5,
+                pitchDecay: 0.1,
+                octaves: 2,
+                envelope: { attack: 0.01, decay: 0.3, sustain: 0, release: 0.1 }
+            }).toDestination();
+
+            // Pelican Explosion
+            synths.explosion = new Tone.NoiseSynth({
+                volume: -5,
+                noise: { type: 'brown' },
+                envelope: { attack: 0.01, decay: 0.4, sustain: 0 }
+            }).toDestination();
+
+            // Crow Shoot (Homing)
+            synths.shoot.crow = new Tone.Synth({
+                volume: -15,
+                oscillator: { type: "triangle" },
+                filter: { Q: 1, type: "lowpass", cutoff: 800 },
+                envelope: { attack: 0.05, decay: 0.2, sustain: 0.1, release: 0.2 }
+            }).toDestination();
+
+            // Woodpecker Shoot (Melee)
+            synths.shoot.woodpecker = new Tone.NoiseSynth({
+                volume: -18,
+                noise: { type: "white", playbackRate: 5 },
+                envelope: { attack: 0.001, decay: 0.03, sustain: 0 }
+            }).toDestination();
+
+            // Ability Synths
+            synths.falconStoop = new Tone.NoiseSynth({
+                volume: 0,
+                noise: { type: 'white', playbackRate: 0.1 },
+                envelope: { attack: 0.1, decay: 0.5, sustain: 0 }
+            }).toDestination();
+            synths.owlCloak = new Tone.Synth({ volume: -10, oscillator: {type: 'triangle'} }).toDestination();
+            synths.pelicanGulp = new Tone.Synth({ volume: -10, oscillator: {type: 'sine'} }).toDestination();
+            synths.crowAbility = new Tone.NoiseSynth({ volume: -5, noise: {type: 'pink'}, envelope: {attack: 0.1, decay: 0.5, sustain: 0}}).toDestination();
+            synths.woodpeckerAbility = new Tone.NoiseSynth({ volume: -10, noise: {type: 'white', playbackRate: 10}, envelope: {attack: 0.01, decay: 0.1, sustain: 0.1, release: 0.1}}).toDestination();
+
+
+            // --- Music Loop ---
+            // Using Tone.Sequence for a simple industrial loop
+            const kickLoop = new Tone.Loop(time => {
+                synths.kick.triggerAttackRelease("C1", "8n", time);
+            }, "4n").start(0);
+
+            const bassLoop = new Tone.Sequence((time, note) => {
+                synths.bass.triggerAttackRelease(note, "16n", time);
+            }, ["C1", "C1", "C1", "G1"], "4n").start(0);
+            
+            Tone.Transport.bpm.value = 130;
+            audioInitialized = true;
+        }
+
+        // --- Helper: Create Minion (defined early for Crow ability) ---
+        function createMinion(x, y) {
+            minions.push({
+                x: x + (Math.random() - 0.5) * 20,
+                y: y + (Math.random() - 0.5) * 20,
+                emoji: '⚫️',
+                size: 10,
+                speed: 350,
+                damage: 25,
+                life: 5 // 5 seconds
+            });
+        }
+
+        // --- Bird Class Definitions ---
+        const BIRD_CLASSES = {
+            falcon: {
+                name: 'falcon',
+                emoji: '🦅',
+                size: 20,
+                speed: 350,
+                maxHealth: 100,
+                weapon: {
+                    fireRate: 0.7, // seconds
+                    bulletSpeed: 1200,
+                    damage: 50,
+                    spread: 0,
+                    color: '#00ffff', // cyan
+                    size: 8,
+                },
+                ability: {
+                    cooldown: 5, // seconds
+                    duration: 0.2, // dash duration
+                },
+                onAbility: (player) => {
+                    player.isDashing = true;
+                    player.isInvincible = true;
+                    player.dashSpeed = player.speed * 5;
+                    player.dashAngle = mouse.angle;
+                    synths.falconStoop.triggerAttackRelease("0.5");
+                },
+                updateAbility: (player, delta) => {
+                    if (player.isDashing) {
+                        player.x += Math.cos(player.dashAngle) * player.dashSpeed * delta;
+                        player.y += Math.sin(player.dashAngle) * player.dashSpeed * delta;
+                    }
+                },
+                endAbility: (player) => {
+                    player.isDashing = false;
+                    player.isInvincible = false;
+                    // Create shockwave
+                    shockwaves.push(createShockwave(player.x, player.y, 200, 75));
+                    addScreenShake(0.8);
+                }
+            },
+            owl: {
+                name: 'owl',
+                emoji: '🦉',
+                size: 22,
+                speed: 300,
+                maxHealth: 125,
+                weapon: {
+                    fireRate: 0.8,
+                    bulletSpeed: 700,
+                    damage: 20,
+                    spread: 0.4, // radians
+                    bulletCount: 6,
+                    color: '#ffffff',
+                    size: 4,
+                    range: 300 // short range
+                },
+                ability: {
+                    cooldown: 8,
+                    duration: 4,
+                },
+                onAbility: (player) => {
+                    player.isCloaked = true;
+                    synths.owlCloak.triggerAttackRelease('A4', '0.2');
+                },
+                endAbility: (player) => {
+                    player.isCloaked = false;
+                    synths.owlCloak.triggerAttackRelease('A3', '0.2');
+                }
+            },
+            hummingbird: {
+                name: 'hummingbird',
+                emoji: '💨',
+                size: 15,
+                speed: 450,
+                maxHealth: 80,
+                weapon: {
+                    fireRate: 0.08,
+                    bulletSpeed: 900,
+                    damage: 8,
+                    spread: 0.1,
+                    color: '#f0f000', // yellow
+                    size: 3,
+                },
+                ability: {
+                    cooldown: 6,
+                    duration: 3,
+                },
+                onAbility: (player) => {
+                    player.isStrafing = true;
+                    player.weapon.originalFireRate = player.weapon.fireRate;
+                    player.weapon.fireRate /= 2.5; // Massive fire rate increase
+                },
+                endAbility: (player) => {
+                    player.isStrafing = false;
+                    player.weapon.fireRate = player.weapon.originalFireRate;
+                }
+            },
+            pelican: {
+                name: 'pelican',
+                emoji: '🦢',
+                size: 25,
+                speed: 250,
+                maxHealth: 150,
+                weapon: {
+                    fireRate: 1.2,
+                    bulletSpeed: 600,
+                    damage: 80, // explosion damage
+                    spread: 0,
+                    color: '#00ff00',
+                    size: 10,
+                    isExplosive: true,
+                    explosionRadius: 80
+                },
+                ability: {
+                    cooldown: 7,
+                    duration: 1.5,
+                },
+                onAbility: (player) => {
+                    player.isGulping = true;
+                    player.isInvincible = true;
+                    synths.pelicanGulp.triggerAttackRelease('C3', '1.5');
+                },
+                endAbility: (player) => {
+                    player.isGulping = false;
+                    player.isInvincible = false;
+                }
+            },
+            crow: {
+                name: 'crow',
+                emoji: '🐦‍⬛',
+                size: 20,
+                speed: 320,
+                maxHealth: 110,
+                weapon: {
+                    fireRate: 0.6,
+                    bulletSpeed: 300,
+                    damage: 15,
+                    spread: 0.1,
+                    color: '#8b5cf6', // purple
+                    size: 6,
+                    isHoming: true,
+                    range: 800
+                },
+                ability: {
+                    cooldown: 10,
+                    duration: 5, // Minions last 5 seconds
+                },
+                onAbility: (player) => {
+                    synths.crowAbility.triggerAttackRelease('0.5');
+                    createMinion(player.x, player.y);
+                    createMinion(player.x, player.y);
+                    createMinion(player.x, player.y);
+                }
+            },
+            woodpecker: {
+                name: 'woodpecker',
+                emoji: '🐦',
+                size: 18,
+                speed: 330,
+                maxHealth: 130,
+                weapon: {
+                    fireRate: 0.1,
+                    bulletSpeed: 1000,
+                    damage: 10,
+                    spread: 0.2,
+                    color: '#ef4444', // red
+                    size: 3,
+                    range: 80 // Very short range (melee)
+                },
+                ability: {
+                    cooldown: 9,
+                    duration: 2.5,
+                },
+                onAbility: (player) => {
+                    player.isChanneling = true; // Prevents movement
+                    player.drumAngle = 0;
+                    player.weapon.originalFireRate = player.weapon.fireRate;
+                    player.weapon.fireRate = 0.03; // Ultra fast
+                },
+                updateAbility: (player, delta) => {
+                    // Spin and fire
+                    player.drumAngle += delta * 12; // Spins fast
+                    
+                    // Fire automatically
+                    if (player.fireCooldown <= 0) {
+                        const w = player.weapon;
+                        const fireAngle = player.drumAngle;
+                        const bullet = {
+                            x: player.x,
+                            y: player.y,
+                            vx: Math.cos(fireAngle) * w.bulletSpeed,
+                            vy: Math.sin(fireAngle) * w.bulletSpeed,
+                            size: w.size, color: w.color, damage: w.damage, range: w.range, traveled: 0
+                        };
+                        bullets.push(bullet);
+                        synths.shoot.woodpecker.triggerAttackRelease("64n");
+                        player.fireCooldown = player.weapon.fireRate;
+                    }
+                },
+                endAbility: (player) => {
+                    player.isChanneling = false;
+                    player.weapon.fireRate = player.weapon.originalFireRate;
+                }
+            }
+        };
+
+        // --- Game Setup ---
+        function resizeCanvas() {
+            const container = document.getElementById('game-container');
+            const { width, height } = container.getBoundingClientRect();
+            
+            // Use integer values for canvas size to prevent anti-aliasing
+            canvas.width = Math.floor(width);
+            canvas.height = Math.floor(height);
+            
+            // Disable image smoothing for crisp pixel art
+            ctx.imageSmoothingEnabled = false;
+        }
+
+        function initGame(className) {
+            // Reset state
+            score = 0;
+            gameTime = 0;
+            isPlaying = true;
+            lastTime = performance.now();
+            bullets = [];
+            enemies = [];
+            particles = [];
+            powerUps = [];
+            shockwaves = [];
+            minions = [];
+            enemySpawnTimer = 0;
+            enemySpawnInterval = 2.5;
+            screenShake.trauma = 0;
+
+            // Create Player
+            player = {
+                x: canvas.width / 2,
+                y: canvas.height / 2,
+                health: 100,
+                fireCooldown: 0,
+                abilityCooldownTimer: 0,
+                abilityActiveTimer: 0,
+                isAbilityActive: false,
+                isInvincible: false,
+                ...BIRD_CLASSES[className] // Spread class properties
+            };
+            player.health = player.maxHealth;
+            
+            // Hide Modals
+            startModal.classList.add('hidden');
+            gameOverModal.classList.add('hidden');
+            modalContainer.classList.add('hidden');
+
+            // Start music
+            if (Tone.Transport.state !== 'started') {
+                Tone.Transport.start();
+            }
+        }
+
+        function gameOver() {
+            isPlaying = false;
+            finalScoreEl.textContent = score;
+            modalContainer.classList.remove('hidden');
+            gameOverModal.classList.remove('hidden');
+            if (Tone.Transport.state === 'started') {
+                Tone.Transport.stop();
+            }
+        }
+
+        // --- Event Listeners ---
+        function setupEventListeners() {
+            window.addEventListener('resize', resizeCanvas);
+
+            // Class selection
+            classButtons.forEach(button => {
+                button.addEventListener('click', async () => {
+                    // Start audio context on user gesture
+                    if (!audioInitialized) {
+                        await Tone.start();
+                        initAudio();
+                        console.log("Audio Initialized.");
+                    }
+                    initGame(button.dataset.class);
+                    // Start the loop using requestAnimationFrame
+                    requestAnimationFrame(gameLoop);
+                });
+            });
+
+            // Restart game
+            restartButton.addEventListener('click', () => {
+                startModal.classList.remove('hidden');
+                gameOverModal.classList.add('hidden');
+            });
+
+            // Player Controls
+            document.addEventListener('keydown', (e) => { keys[e.code] = true; });
+            document.addEventListener('keyup', (e) => { 
+                keys[e.code] = false; 
+                if (e.code === 'Space') {
+                    activateAbility();
+                }
+            });
+
+            // Mouse Controls
+            document.addEventListener('mousedown', () => { isFiring = true; });
+            document.addEventListener('mouseup', () => { isFiring = false; });
+            
+            // Mouse aiming
+            canvas.addEventListener('mousemove', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                mouse.x = e.clientX - rect.left;
+                mouse.y = e.clientY - rect.top;
+                mouse.angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
+            });
+        }
+
+        // --- Helper Functions ---
+        function isOffScreen(obj) {
+            return obj.x < -obj.size || obj.x > canvas.width + obj.size ||
+                   obj.y < -obj.size || obj.y > canvas.height + obj.size;
+        }
+
+        function getDistance(obj1, obj2) {
+            const dx = obj1.x - obj2.x;
+            const dy = obj1.y - obj2.y;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        function isColliding(obj1, obj2) {
+            const dist = getDistance(obj1, obj2);
+            return dist < (obj1.size || 10) + (obj2.size || 10);
+        }
+        
+        function addScreenShake(amount) {
+            screenShake.trauma = Math.min(screenShake.trauma + amount, 1);
+        }
+        
+        function updateScreenShake(delta) {
+            if (screenShake.trauma > 0) {
+                const shakeAmount = Math.pow(screenShake.trauma, 2) * 16;
+                screenShake.x = (Math.random() - 0.5) * 2 * shakeAmount;
+                screenShake.y = (Math.random() - 0.5) * 2 * shakeAmount;
+                screenShake.trauma = Math.max(0, screenShake.trauma - delta * 1.5); // Decay
+            } else {
+                screenShake.x = 0;
+                screenShake.y = 0;
+            }
+        }
+
+        // --- Entity Creation ---
+        function createBullet() {
+            const w = player.weapon;
+            const fireAngle = mouse.angle + (Math.random() - 0.5) * w.spread;
+            
+            const bullet = {
+                x: player.x + Math.cos(mouse.angle) * player.size,
+                y: player.y + Math.sin(mouse.angle) * player.size,
+                vx: Math.cos(fireAngle) * w.bulletSpeed,
+                vy: Math.sin(fireAngle) * w.bulletSpeed,
+                size: w.size,
+                color: w.color,
+                damage: w.damage,
+                isExplosive: w.isExplosive,
+                explosionRadius: w.explosionRadius,
+                isHoming: w.isHoming,
+                range: w.range || 1000, // Default range
+                traveled: 0
+            };
+            bullets.push(bullet);
+            
+            // Play corresponding shoot sound
+            if (synths.shoot[player.name]) {
+                // NoiseSynth (owl, woodpecker) only takes duration, not a note
+                if (player.name === 'owl' || player.name === 'woodpecker') {
+                    synths.shoot[player.name].triggerAttackRelease("64n");
+                } else {
+                    synths.shoot[player.name].triggerAttackRelease("C4", "64n");
+                }
+            }
+        }
+
+        function createEnemy() {
+            // Spawn from random edge
+            let x, y;
+            if (Math.random() < 0.5) { // Top/Bottom
+                x = Math.random() * canvas.width;
+                y = Math.random() < 0.5 ? -30 : canvas.height + 30;
+            } else { // Left/Right
+                x = Math.random() < 0.5 ? -30 : canvas.width + 30;
+                y = Math.random() * canvas.height;
+            }
+
+            const type = Math.random() < 0.2 ? 'wyrm' : 'grub'; // 20% chance for a Wyrm
+            let enemy;
+
+            if (type === 'grub') {
+                enemy = {
+                    type: 'grub',
+                    emoji: '🐛',
+                    x: x,
+                    y: y,
+                    size: 15 + Math.random() * 10,
+                    speed: 80 + Math.random() * 50 + (gameTime / 20), // Gets faster over time
+                    health: 30 + (gameTime / 10),
+                    maxHealth: 30 + (gameTime / 10),
+                    damage: 10,
+                };
+            } else {
+                enemy = {
+                    type: 'wyrm',
+                    emoji: '🐍',
+                    x: x,
+                    y: y,
+                    size: 25,
+                    speed: 20 + Math.random() * 10, // Slower
+                    health: 100 + (gameTime / 10),
+                    maxHealth: 100 + (gameTime / 10),
+                    damage: 20,
+                    isShooter: true,
+                    shootCooldown: 0,
+                    shootInterval: 2.5, // seconds
+                };
+            }
+            enemies.push(enemy);
+        }
+
+        function createEnemyBullet(enemy) {
+            const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+            const speed = 400;
+            bullets.push({
+                x: enemy.x,
+                y: enemy.y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                size: 8,
+                color: '#ff00ff', // Magenta acid
+                damage: enemy.damage,
+                isEnemy: true,
+                range: 1200,
+                traveled: 0
+            });
+            // todo: add enemy shoot sound
+        }
+        
+        function createParticles(x, y, count, color, speed, size) {
+            for (let i = 0; i < count; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                particles.push({
+                    x,
+                    y,
+                    vx: Math.cos(angle) * Math.random() * speed,
+                    vy: Math.sin(angle) * Math.random() * speed,
+                    size: Math.random() * size + 1,
+                    color: color,
+                    life: 1, // 1 second
+                });
+            }
+        }
+        
+        function createPowerUp(x, y) {
+            const types = ['health', 'damage', 'invincibility'];
+            const type = types[Math.floor(Math.random() * types.length)];
+            let emoji, color, onCollect;
+            
+            if (type === 'health') {
+                emoji = '🥚'; // Mega-Nest
+                color = '#22c55e';
+                onCollect = () => { player.health = Math.min(player.maxHealth, player.health + 50); };
+            } else if (type === 'damage') {
+                emoji = '🔥'; // Rage-Nectar
+                color = '#ef4444';
+                onCollect = () => { 
+                    player.damageBoostTimer = 5; // 5 seconds
+                    player.originalDamage = player.weapon.damage;
+                    player.weapon.damage *= 2; // Double damage
+                };
+            } else {
+                emoji = '🛡️'; // Iron-Feathers
+                color = '#3b82f6';
+                onCollect = () => { 
+                    player.isInvincible = true;
+                    player.invincibilityTimer = 5; // 5 seconds
+                };
+            }
+            
+            powerUps.push({ x, y, size: 20, emoji, color, onCollect, life: 10 });
+            synths.powerUp.triggerAttackRelease('C5', '0.2');
+        }
+
+        function createShockwave(x, y, maxRadius, damage) {
+            shockwaves.push({
+                x, y, damage, maxRadius,
+                radius: 0,
+                life: 0.5, // seconds
+                hitEnemies: new Set()
+            });
+            synths.explosion.triggerAttackRelease('0.3');
+        }
+
+        // --- Game Loop: Update ---
+        function update(delta) {
+            if (!isPlaying) return;
+            gameTime += delta;
+
+            updatePlayer(delta);
+            updateBullets(delta);
+            updateEnemies(delta);
+            updateParticles(delta);
+            updatePowerUps(delta);
+            updateShockwaves(delta);
+            updateMinions(delta); // <-- ADDED
+            updateScreenShake(delta);
+            
+            // Spawn enemies
+            enemySpawnTimer += delta;
+            if (enemySpawnTimer >= enemySpawnInterval) {
+                for(let i = 0; i < 1 + Math.floor(gameTime / 15); i++) {
+                     createEnemy();
+                }
+                enemySpawnTimer = 0;
+                // Increase spawn rate over time, capped
+                enemySpawnInterval = Math.max(0.3, 2.5 - gameTime / 30);
+            }
+        }
+
+        function updatePlayer(delta) {
+            // Handle movement
+            let dx = 0;
+            let dy = 0;
+            if (keys['KeyW'] || keys['ArrowUp']) dy -= 1;
+            if (keys['KeyS'] || keys['ArrowDown']) dy += 1;
+            if (keys['KeyA'] || keys['ArrowLeft']) dx -= 1;
+            if (keys['KeyD'] || keys['ArrowRight']) dx += 1;
+            
+            // Normalize diagonal movement
+            const mag = Math.sqrt(dx * dx + dy * dy);
+            if (mag > 0) {
+                dx /= mag;
+                dy /= mag;
+            }
+            
+            // Apply speed, unless strafing or dashing
+            if (!player.isStrafing && !player.isDashing && !player.isChanneling) {
+                player.x += dx * player.speed * delta;
+                player.y += dy * player.speed * delta;
+            }
+            
+            // Clamp player to screen
+            player.x = Math.max(player.size, Math.min(canvas.width - player.size, player.x));
+            player.y = Math.max(player.size, Math.min(canvas.height - player.size, player.y));
+
+            // Update aiming angle
+            mouse.angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
+
+            // Handle firing
+            if (player.fireCooldown > 0) {
+                player.fireCooldown -= delta;
+            }
+            if (isFiring && player.fireCooldown <= 0 && !player.isChanneling) {
+                const bulletCount = player.weapon.bulletCount || 1;
+                for (let i = 0; i < bulletCount; i++) {
+                    createBullet();
+                }
+                player.fireCooldown = player.weapon.fireRate;
+            }
+            
+            // Handle abilities
+            if (player.abilityCooldownTimer > 0) {
+                player.abilityCooldownTimer -= delta;
+            }
+            if (player.isAbilityActive) {
+                player.abilityActiveTimer -= delta;
+                if (player.updateAbility) {
+                    player.updateAbility(player, delta);
+                }
+                if (player.abilityActiveTimer <= 0) {
+                    player.isAbilityActive = false;
+                    if (player.endAbility) player.endAbility(player);
+                }
+            }
+
+            // Handle temporary boosts
+            if (player.damageBoostTimer > 0) {
+                player.damageBoostTimer -= delta;
+                if (player.damageBoostTimer <= 0) {
+                    player.weapon.damage = player.originalDamage;
+                }
+            }
+            if (player.invincibilityTimer > 0) {
+                player.invincibilityTimer -= delta;
+                if (player.invincibilityTimer <= 0) {
+                    player.isInvincible = false;
+                }
+            }
+            
+            // Check Gulp (Pelican ability)
+            if (player.isGulping) {
+                // Gulp enemy bullets
+                for (let i = bullets.length - 1; i >= 0; i--) {
+                    const b = bullets[i];
+                    if (b.isEnemy && getDistance(player, b) < 100) {
+                        bullets.splice(i, 1);
+                        player.health = Math.min(player.maxHealth, player.health + 5);
+                        createParticles(b.x, b.y, 5, '#00ff00', 50, 4);
+                    }
+                }
+                // Gulp grubs
+                for (let i = enemies.length - 1; i >= 0; i--) {
+                    const e = enemies[i];
+                    if (e.type === 'grub' && getDistance(player, e) < 100) {
+                        player.health = Math.min(player.maxHealth, player.health + 10);
+                        score += 50;
+                        createParticles(e.x, e.y, 20, '#ff0000', 100, 5);
+                        synths.enemyDie.triggerAttackRelease('8n');
+                        enemies.splice(i, 1);
+                    }
+                }
+            }
+        }
+        
+        function activateAbility() {
+            if (player.abilityCooldownTimer <= 0) {
+                player.isAbilityActive = true;
+                player.abilityCooldownTimer = player.ability.cooldown;
+                player.abilityActiveTimer = player.ability.duration;
+                if(player.onAbility) player.onAbility(player);
+            }
+        }
+
+        function updateBullets(delta) {
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const b = bullets[i];
+                b.x += b.vx * delta;
+                b.y += b.vy * delta;
+                b.traveled += Math.sqrt(Math.pow(b.vx * delta, 2) + Math.pow(b.vy * delta, 2));
+
+                // Homing logic for Crow
+                if (b.isHoming && !b.isEnemy) {
+                    let closestEnemy = null;
+                    let minDist = b.range;
+                    for (const e of enemies) {
+                        const dist = getDistance(b, e);
+                        if (dist < minDist) {
+                            minDist = dist;
+                            closestEnemy = e;
+                        }
+                    }
+                    
+                    if (closestEnemy) {
+                        const angle = Math.atan2(closestEnemy.y - b.y, closestEnemy.x - b.x);
+                        b.vx += Math.cos(angle) * 200 * delta; // Adjust homing strength
+                        b.vy += Math.sin(angle) * 200 * delta;
+                        
+                        // Clamp speed
+                        const speed = Math.sqrt(b.vx*b.vx + b.vy*b.vy);
+                        if (speed > player.weapon.bulletSpeed) {
+                            b.vx = (b.vx / speed) * player.weapon.bulletSpeed;
+                            b.vy = (b.vy / speed) * player.weapon.bulletSpeed;
+                        }
+                    }
+                }
+
+                if (b.traveled >= b.range || isOffScreen(b)) {
+                    bullets.splice(i, 1);
+                    continue;
+                }
+
+                // Check collisions
+                if (b.isEnemy) {
+                    if (!player.isInvincible && isColliding(b, player)) {
+                        bullets.splice(i, 1);
+                        playerHit(b.damage);
+                    }
+                } else {
+                    // Player bullet collisions with enemies
+                    for (let j = enemies.length - 1; j >= 0; j--) {
+                        const e = enemies[j];
+                        if (isColliding(b, e)) {
+                            bullets.splice(i, 1);
+                            enemyHit(e, b.damage, j);
+                            if (b.isExplosive) {
+                                createShockwave(b.x, b.y, b.explosionRadius, b.damage);
+                            }
+                            break; // Bullet can only hit one enemy
+                        }
+                    }
+                }
+            }
+        }
+
+        function updateEnemies(delta) {
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const e = enemies[i];
+                
+                // Determine target
+                let targetX = player.x;
+                let targetY = player.y;
+                if (player.isCloaked) {
+                    // If cloaked, move randomly (or towards last known spot - simpler is random)
+                    if (!e.wanderAngle) e.wanderAngle = Math.random() * Math.PI * 2;
+                    e.wanderAngle += (Math.random() - 0.5) * delta;
+                    targetX = e.x + Math.cos(e.wanderAngle) * 100;
+                    targetY = e.y + Math.sin(e.wanderAngle) * 100;
+                }
+
+                // Move towards target
+                const angle = Math.atan2(targetY - e.y, targetX - e.x);
+                e.x += Math.cos(angle) * e.speed * delta;
+                e.y += Math.sin(angle) * e.speed * delta;
+                
+                // Enemy shooting
+                if (e.isShooter) {
+                    e.shootCooldown -= delta;
+                    if (e.shootCooldown <= 0 && !player.isCloaked) {
+                        createEnemyBullet(e);
+                        e.shootCooldown = e.shootInterval;
+                    }
+                }
+
+                // Check collision with player
+                if (!player.isInvincible && !player.isDashing && isColliding(e, player)) {
+                    playerHit(e.damage);
+                    // Knockback enemy
+                    e.x -= Math.cos(angle) * e.size;
+                    e.y -= Math.sin(angle) * e.size;
+                }
+            }
+        }
+        
+        function updateParticles(delta) {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx * delta;
+                p.y += p.vy * delta;
+                p.life -= delta;
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+        }
+
+        function updatePowerUps(delta) {
+            for (let i = powerUps.length - 1; i >= 0; i--) {
+                const p = powerUps[i];
+                p.life -= delta;
+                if (p.life <= 0) {
+                    powerUps.splice(i, 1);
+                    continue;
+                }
+                
+                if (isColliding(player, p)) {
+                    p.onCollect();
+                    powerUps.splice(i, 1);
+                }
+            }
+        }
+        
+        function updateShockwaves(delta) {
+             for (let i = shockwaves.length - 1; i >= 0; i--) {
+                const s = shockwaves[i];
+
+                // --- FIX ---
+                // Add a safety check. If s is somehow undefined, skip this iteration
+                // to prevent a crash.
+                if (!s) continue; 
+                // --- END FIX ---
+                
+                s.radius += (s.maxRadius / s.life) * delta;
+                s.life -= delta;
+                
+                if (s.life <= 0) {
+                    shockwaves.splice(i, 1);
+                    continue;
+                }
+                
+                // Check for hits
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    const e = enemies[j];
+                    if (!s.hitEnemies.has(e) && getDistance(s, e) < s.radius + e.size) {
+                        s.hitEnemies.add(e);
+                        enemyHit(e, s.damage, j);
+                    }
+                }
+             }
+        }
+
+        function updateMinions(delta) {
+            for (let i = minions.length - 1; i >= 0; i--) {
+                const m = minions[i];
+                if (!m) continue;
+
+                m.life -= delta;
+                if (m.life <= 0) {
+                    minions.splice(i, 1);
+                    continue;
+                }
+
+                // Find nearest enemy
+                let closestEnemy = null;
+                let minDist = 10000;
+                for (const e of enemies) {
+                    const dist = getDistance(m, e);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        closestEnemy = e;
+                    }
+                }
+
+                // Move towards enemy
+                if (closestEnemy) {
+                    const angle = Math.atan2(closestEnemy.y - m.y, closestEnemy.x - m.x);
+                    m.x += Math.cos(angle) * m.speed * delta;
+                    m.y += Math.sin(angle) * m.speed * delta;
+
+                    // Check collision
+                    if (isColliding(m, closestEnemy)) {
+                        enemyHit(closestEnemy, m.damage, enemies.indexOf(closestEnemy));
+                        createParticles(m.x, m.y, 15, '#8b5cf6', 100, 4);
+                        minions.splice(i, 1);
+                    }
+                } else {
+                    // Wander near player if no enemies
+                    const angle = Math.atan2(player.y - m.y, player.x - m.x);
+                    m.x += Math.cos(angle) * (m.speed / 2) * delta;
+                    m.y += Math.sin(angle) * (m.speed / 2) * delta;
+                }
+            }
+        }
+
+        function playerHit(damage) {
+            if (player.isInvincible) return;
+            
+            player.health -= damage;
+            addScreenShake(0.5);
+            
+            // --- FIX ---
+            // Changed duration from '0.1' (which is a 10th of a second) to '64n' (a very short note)
+            // to prevent audio scheduling errors if the player is hit
+            // by multiple enemies in the exact same frame.
+            synths.playerHit.triggerAttackRelease('64n');
+            // --- END FIX ---
+            
+            if (player.health <= 0) {
+                player.health = 0;
+                gameOver();
+            }
+        }
+        
+        function enemyHit(enemy, damage, index) {
+            enemy.health -= damage;
+            createParticles(enemy.x, enemy.y, 5, '#ff0000', 50, 4); // Blood spray
+            
+            // --- FIX ---
+            // Changed duration from "16n" to "64n" to prevent audio scheduling
+            // conflicts when many hits happen at the same time (like with Owl's shotgun).
+            synths.enemyHit.triggerAttackRelease('A2', '64n');
+            // --- END FIX ---
+            
+            if (enemy.health <= 0) {
+                score += 100;
+                createParticles(enemy.x, enemy.y, 30, '#ff0000', 150, 6); // Gory explosion
+                synths.enemyDie.triggerAttackRelease('0.2');
+                
+                // Chance to drop power-up
+                if (Math.random() < 0.1) { // 10% chance
+                    createPowerUp(enemy.x, enemy.y);
+                }
+                
+                enemies.splice(index, 1);
+            }
+        }
+
+        // --- Game Loop: Draw ---
+        function draw() {
+            ctx.save();
+            // Apply screen shake
+            ctx.translate(Math.floor(screenShake.x), Math.floor(screenShake.y));
+            
+            // Clear canvas
+            ctx.fillStyle = '#111827'; // bg-gray-900
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw PowerUps
+            ctx.font = '30px sans-serif';
+            for (const p of powerUps) {
+                if (!p) continue; // <-- ADDED SAFETY CHECK
+                ctx.globalAlpha = p.life / 10;
+                ctx.save();
+                ctx.translate(p.x, p.y);
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(0, 0, p.size + 5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1;
+                ctx.font = `${p.size * 1.5}px sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(p.emoji, 0, 0);
+                ctx.restore();
+            }
+            ctx.globalAlpha = 1;
+            
+            // Draw Shockwaves
+            for(const s of shockwaves) {
+                if (!s) continue; // <-- ADDED SAFETY CHECK
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 5;
+                ctx.globalAlpha = s.life * 2;
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, s.radius, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.globalAlpha = 1;
+            }
+
+            // Draw Bullets
+            for (const b of bullets) {
+                if (!b) continue; // <-- ADDED SAFETY CHECK
+                ctx.fillStyle = b.color;
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, b.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Draw Particles
+            for (const p of particles) {
+                if (!p) continue; // <-- ADDED SAFETY CHECK
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = p.life;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+
+            // Draw Minions
+            ctx.font = '20px sans-serif';
+            for (const m of minions) {
+                if (!m) continue; // <-- ADDED SAFETY CHECK
+                ctx.globalAlpha = m.life / 5;
+                ctx.save();
+                ctx.translate(m.x, m.y);
+                ctx.font = `${m.size * 1.5}px sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(m.emoji, 0, 0);
+                ctx.restore();
+            }
+            ctx.globalAlpha = 1;
+
+            // Draw Enemies
+            for (const e of enemies) {
+                if (!e) continue; // <-- ADDED SAFETY CHECK
+                ctx.font = `${e.size * 1.5}px sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(e.emoji, e.x, e.y);
+                
+                // Enemy health bar
+                if (e.health < e.maxHealth) {
+                    ctx.fillStyle = '#4b5563'; // gray
+                    ctx.fillRect(e.x - e.size, e.y - e.size - 10, e.size * 2, 5);
+                    ctx.fillStyle = '#ef4444'; // red
+                    ctx.fillRect(e.x - e.size, e.y - e.size - 10, (e.size * 2) * (e.health / e.maxHealth), 5);
+                }
+            }
+
+            // Draw Player
+            ctx.save();
+            ctx.translate(player.x, player.y);
+            
+            // Set opacity for cloak
+            if (player.isCloaked) {
+                ctx.globalAlpha = 0.3;
+            }
+            // Set visual for invincibility
+            if (player.isInvincible && !player.isCloaked) {
+                ctx.shadowColor = '#fff';
+                ctx.shadowBlur = 20;
+            }
+            // Set visual for damage boost
+            if (player.damageBoostTimer > 0) {
+                ctx.shadowColor = '#ef4444';
+                ctx.shadowBlur = 20;
+            }
+
+            ctx.rotate(mouse.angle);
+            ctx.font = `${player.size * 1.5}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(player.emoji, 0, 0);
+            ctx.restore();
+            
+            ctx.globalAlpha = 1;
+
+            // Draw Pelican Gulp effect
+            if (player.isGulping) {
+                ctx.save();
+                ctx.translate(player.x, player.y);
+                ctx.rotate(mouse.angle);
+                ctx.fillStyle = 'rgba(100, 100, 255, 0.3)';
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.arc(0, 0, 100, -0.6, 0.6);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+            }
+
+            ctx.restore(); // Restore from screen shake
+            
+            // Draw UI
+            drawUI();
+        }
+
+        function drawUI() {
+            scoreEl.textContent = score;
+            healthBar.value = player.health;
+            healthBar.max = player.maxHealth;
+            
+            const abilityCooldown = player.ability ? player.ability.cooldown : 1;
+            const abilityProgress = (abilityCooldown - player.abilityCooldownTimer) / abilityCooldown;
+            abilityBar.value = player.isAbilityActive ? (player.abilityActiveTimer / player.ability.duration) * 100 : abilityProgress * 100;
+            
+            if (player.abilityCooldownTimer > 0) {
+                abilityReadyText.textContent = `COOLDOWN`;
+                abilityReadyText.classList.remove('text-blue-400');
+                abilityReadyText.classList.add('text-gray-500');
+            } else if (player.isAbilityActive) {
+                abilityReadyText.textContent = 'ACTIVE';
+                abilityReadyText.classList.remove('text-gray-500');
+                abilityReadyText.classList.add('text-yellow-400');
+            } else {
+                abilityReadyText.textContent = 'ABILITY READY';
+                abilityReadyText.classList.remove('text-gray-500', 'text-yellow-400');
+                abilityReadyText.classList.add('text-blue-400');
+            }
+        }
+
+        // --- Main Game Loop ---
+        function gameLoop(timestamp) {
+            if (!isPlaying) return;
+
+            const delta = (timestamp - lastTime) / 1000; // Delta time in seconds
+            lastTime = timestamp;
+
+            update(delta);
+            draw();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Initialization ---
+        setupEventListeners();
+        resizeCanvas();
+
+    </script>
+</body>
+</html>
