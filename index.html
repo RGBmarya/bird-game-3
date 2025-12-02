@@ -131,8 +131,8 @@
                 <p class="mt-4 text-lg text-gray-300">The Annelid Empire has burst forth. They will be sent back in pieces.</p>
                 <p class="mt-4 font-bold text-xl text-white">CHOOSE YOUR AVIARY:</p>
 
-                <!-- Class Selection - 3 columns on medium, 2 rows -->
-                <div class="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4 mt-6 px-2">
+                <!-- Class Selection - 4 columns on large, 2 on small -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mt-6 px-2">
                     <!-- Falcon -->
                     <button class="bird-class-btn p-3 md:p-4 bg-gray-800 border-2 border-gray-700 rounded-lg hover:bg-red-900 hover:border-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all flex flex-col items-center" data-class="falcon">
                         <span class="text-4xl md:text-5xl">🦅</span>
@@ -174,6 +174,13 @@
                         <h3 class="font-pixel text-sm md:text-base mt-2 text-yellow-400">WOODPECKER</h3>
                         <p class="text-xs md:text-sm mt-1 text-gray-300 leading-tight">Berserker. Rapid-fire melee peck.</p>
                         <p class="text-xs mt-1 text-cyan-400 font-semibold">Ability: Drum Solo (360°)</p>
+                    </button>
+                    <!-- Phoenix -->
+                    <button class="bird-class-btn p-3 md:p-4 bg-gray-800 border-2 border-gray-700 rounded-lg hover:bg-red-900 hover:border-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all flex flex-col items-center" data-class="phoenix">
+                        <span class="text-4xl md:text-5xl">🔥</span>
+                        <h3 class="font-pixel text-sm md:text-base mt-2 text-yellow-400">PHOENIX</h3>
+                        <p class="text-xs md:text-sm mt-1 text-gray-300 leading-tight">Immortal flame. Fires burning shots.</p>
+                        <p class="text-xs mt-1 text-cyan-400 font-semibold">Ability: Rebirth (heal)</p>
                     </button>
                 </div>
             </div>
@@ -342,6 +349,13 @@
                 envelope: { attack: 0.001, decay: 0.03, sustain: 0 }
             }).toDestination();
 
+            // Phoenix Shoot (Fire)
+            synths.shoot.phoenix = new Tone.Synth({
+                volume: -12,
+                oscillator: { type: "sawtooth" },
+                envelope: { attack: 0.01, decay: 0.15, sustain: 0, release: 0.1 }
+            }).toDestination();
+
             // Ability Synths
             synths.falconStoop = new Tone.NoiseSynth({
                 volume: 0,
@@ -352,6 +366,7 @@
             synths.pelicanGulp = new Tone.Synth({ volume: -10, oscillator: {type: 'sine'} }).toDestination();
             synths.crowAbility = new Tone.NoiseSynth({ volume: -5, noise: {type: 'pink'}, envelope: {attack: 0.1, decay: 0.5, sustain: 0}}).toDestination();
             synths.woodpeckerAbility = new Tone.NoiseSynth({ volume: -10, noise: {type: 'white', playbackRate: 10}, envelope: {attack: 0.01, decay: 0.1, sustain: 0.1, release: 0.1}}).toDestination();
+            synths.phoenixAbility = new Tone.Synth({ volume: -5, oscillator: {type: 'sine'}, envelope: {attack: 0.5, decay: 1.5, sustain: 0.3, release: 1}}).toDestination();
 
 
             // --- Music Loop ---
@@ -584,6 +599,52 @@
                 endAbility: (player) => {
                     player.isChanneling = false;
                     player.weapon.fireRate = player.weapon.originalFireRate;
+                }
+            },
+            phoenix: {
+                name: 'phoenix',
+                emoji: '🔥',
+                size: 22,
+                speed: 300,
+                maxHealth: 90,
+                weapon: {
+                    fireRate: 0.4,
+                    bulletSpeed: 800,
+                    damage: 25,
+                    spread: 0.15,
+                    color: '#ff6600', // orange fire
+                    size: 6,
+                    isBurning: true, // Leaves fire trail
+                    range: 600
+                },
+                ability: {
+                    cooldown: 12,
+                    duration: 3,
+                },
+                onAbility: (player) => {
+                    player.isRegenerating = true;
+                    player.isInvincible = true;
+                    player.regenRate = (player.maxHealth * 0.6) / 3; // Regen 60% of max health over 3 seconds
+                    synths.phoenixAbility.triggerAttackRelease('1');
+                    // Create flame burst effect
+                    createParticles(player.x, player.y, 30, '#ff6600', 200, 8);
+                    createParticles(player.x, player.y, 20, '#ffcc00', 150, 6);
+                },
+                updateAbility: (player, delta) => {
+                    if (player.isRegenerating) {
+                        player.health = Math.min(player.maxHealth, player.health + player.regenRate * delta);
+                        // Create healing flame particles
+                        if (Math.random() < 0.3) {
+                            createParticles(player.x, player.y, 3, '#ffcc00', 50, 4);
+                        }
+                    }
+                },
+                endAbility: (player) => {
+                    player.isRegenerating = false;
+                    player.isInvincible = false;
+                    // Final burst
+                    shockwaves.push(createShockwave(player.x, player.y, 150, 40));
+                    addScreenShake(0.5);
                 }
             }
         };
