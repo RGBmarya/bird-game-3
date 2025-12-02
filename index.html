@@ -186,10 +186,29 @@
             </div>
 
             <!-- Game Over Modal -->
-            <div id="game-over-modal" class="hidden text-white text-center">
+            <div id="game-over-modal" class="hidden text-white text-center max-w-2xl w-full">
                 <h1 class="font-pixel text-4xl md:text-7xl text-red-600 text-doom">YOU ARE PECKED</h1>
                 <p class="font-pixel text-2xl mt-4">FINAL SCORE: <span id="final-score" class="text-yellow-400">0</span></p>
-                <button id="restart-button" class="mt-8 font-pixel text-2xl bg-red-700 text-white py-4 px-8 rounded-lg hover:bg-red-600 border-b-4 border-red-900 active:border-b-0">
+                
+                <!-- New High Score Input (hidden by default) -->
+                <div id="new-highscore" class="hidden mt-4">
+                    <p class="font-pixel text-lg text-green-400 mb-2">🏆 NEW HIGH SCORE! 🏆</p>
+                    <input type="text" id="player-name" maxlength="10" placeholder="Enter name" 
+                        class="bg-gray-800 border-2 border-yellow-500 text-white text-center font-pixel text-lg px-4 py-2 rounded-lg focus:outline-none focus:border-yellow-300 w-48">
+                    <button id="submit-score" class="ml-2 font-pixel text-lg bg-yellow-600 text-black px-4 py-2 rounded-lg hover:bg-yellow-500 border-b-2 border-yellow-800">
+                        SAVE
+                    </button>
+                </div>
+
+                <!-- Leaderboard -->
+                <div class="mt-6 bg-gray-900 bg-opacity-80 rounded-lg p-4 border border-gray-700">
+                    <h2 class="font-pixel text-xl text-yellow-400 mb-3">🏆 LEADERBOARD 🏆</h2>
+                    <div id="leaderboard-list" class="space-y-1 text-left">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <button id="restart-button" class="mt-6 font-pixel text-2xl bg-red-700 text-white py-4 px-8 rounded-lg hover:bg-red-600 border-b-4 border-red-900 active:border-b-0">
                     RETRY THE PECKONING
                 </button>
             </div>
@@ -212,6 +231,10 @@
         const healthBar = document.getElementById('health-bar');
         const abilityBar = document.getElementById('ability-bar');
         const abilityReadyText = document.getElementById('ability-ready-text');
+        const leaderboardList = document.getElementById('leaderboard-list');
+        const newHighscoreDiv = document.getElementById('new-highscore');
+        const playerNameInput = document.getElementById('player-name');
+        const submitScoreBtn = document.getElementById('submit-score');
 
         // --- Game State ---
         let isPlaying = false;
@@ -711,6 +734,108 @@
             if (Tone.Transport.state === 'started') {
                 Tone.Transport.stop();
             }
+            
+            // Check if it's a new high score
+            const isNewHighScore = checkNewHighScore(score);
+            if (isNewHighScore && score > 0) {
+                newHighscoreDiv.classList.remove('hidden');
+                playerNameInput.value = '';
+                playerNameInput.focus();
+            } else {
+                newHighscoreDiv.classList.add('hidden');
+            }
+            
+            // Render leaderboard
+            renderLeaderboard();
+        }
+
+        // --- Leaderboard Functions ---
+        const LEADERBOARD_KEY = 'birdgame_leaderboard';
+        const MAX_LEADERBOARD_ENTRIES = 10;
+
+        function getLeaderboard() {
+            const data = localStorage.getItem(LEADERBOARD_KEY);
+            if (data) {
+                try {
+                    return JSON.parse(data);
+                } catch (e) {
+                    return [];
+                }
+            }
+            return [];
+        }
+
+        function saveLeaderboard(leaderboard) {
+            localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(leaderboard));
+        }
+
+        function checkNewHighScore(newScore) {
+            const leaderboard = getLeaderboard();
+            if (leaderboard.length < MAX_LEADERBOARD_ENTRIES) return true;
+            return newScore > leaderboard[leaderboard.length - 1].score;
+        }
+
+        function addScore(name, newScore, birdClass) {
+            const leaderboard = getLeaderboard();
+            const entry = {
+                name: name.toUpperCase().substring(0, 10) || 'ANONYMOUS',
+                score: newScore,
+                bird: birdClass,
+                date: new Date().toLocaleDateString()
+            };
+            
+            leaderboard.push(entry);
+            leaderboard.sort((a, b) => b.score - a.score);
+            
+            // Keep only top entries
+            if (leaderboard.length > MAX_LEADERBOARD_ENTRIES) {
+                leaderboard.length = MAX_LEADERBOARD_ENTRIES;
+            }
+            
+            saveLeaderboard(leaderboard);
+            return leaderboard;
+        }
+
+        function getBirdEmoji(birdName) {
+            const emojis = {
+                falcon: '🦅',
+                owl: '🦉',
+                hummingbird: '💨',
+                pelican: '🦢',
+                crow: '🐦‍⬛',
+                woodpecker: '🐦',
+                phoenix: '🔥'
+            };
+            return emojis[birdName] || '🐦';
+        }
+
+        function renderLeaderboard() {
+            const leaderboard = getLeaderboard();
+            
+            if (leaderboard.length === 0) {
+                leaderboardList.innerHTML = '<p class="text-gray-500 text-center font-pixel text-sm">No scores yet. Be the first!</p>';
+                return;
+            }
+            
+            let html = '';
+            leaderboard.forEach((entry, index) => {
+                const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`;
+                const isCurrentScore = entry.score === score && !newHighscoreDiv.classList.contains('hidden');
+                const highlight = isCurrentScore ? 'bg-yellow-900 bg-opacity-30' : '';
+                
+                html += `
+                    <div class="flex items-center justify-between py-1 px-2 rounded ${highlight}">
+                        <div class="flex items-center gap-2">
+                            <span class="font-pixel text-sm w-8">${medal}</span>
+                            <span class="text-lg">${getBirdEmoji(entry.bird)}</span>
+                            <span class="font-pixel text-sm text-gray-200">${entry.name}</span>
+                        </div>
+                        <span class="font-pixel text-sm text-yellow-400">${entry.score.toLocaleString()}</span>
+                    </div>
+                `;
+            });
+            
+            leaderboardList.innerHTML = html;
         }
 
         // --- Event Listeners ---
@@ -736,6 +861,22 @@
             restartButton.addEventListener('click', () => {
                 startModal.classList.remove('hidden');
                 gameOverModal.classList.add('hidden');
+                newHighscoreDiv.classList.add('hidden');
+            });
+
+            // Submit high score
+            submitScoreBtn.addEventListener('click', () => {
+                const name = playerNameInput.value.trim() || 'ANONYMOUS';
+                addScore(name, score, player.name);
+                newHighscoreDiv.classList.add('hidden');
+                renderLeaderboard();
+            });
+
+            // Allow Enter key to submit score
+            playerNameInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    submitScoreBtn.click();
+                }
             });
 
             // Player Controls
