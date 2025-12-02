@@ -182,6 +182,13 @@
                         <p class="text-xs md:text-sm mt-1 text-gray-300 leading-tight">Immortal flame. Fires burning shots.</p>
                         <p class="text-xs mt-1 text-cyan-400 font-semibold">Ability: Rebirth (heal)</p>
                     </button>
+                    <!-- Shoebill -->
+                    <button class="bird-class-btn p-3 md:p-4 bg-gray-800 border-2 border-gray-700 rounded-lg hover:bg-red-900 hover:border-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all flex flex-col items-center" data-class="shoebill">
+                        <span class="text-4xl md:text-5xl">🦤</span>
+                        <h3 class="font-pixel text-sm md:text-base mt-2 text-yellow-400">SHOEBILL</h3>
+                        <p class="text-xs md:text-sm mt-1 text-gray-300 leading-tight">Apex predator. Devastating beak slams.</p>
+                        <p class="text-xs mt-1 text-cyan-400 font-semibold">Ability: Death Stare (stun)</p>
+                    </button>
                 </div>
             </div>
 
@@ -379,6 +386,14 @@
                 envelope: { attack: 0.01, decay: 0.15, sustain: 0, release: 0.1 }
             }).toDestination();
 
+            // Shoebill Shoot (Beak Slam)
+            synths.shoot.shoebill = new Tone.MembraneSynth({
+                volume: -5,
+                pitchDecay: 0.15,
+                octaves: 3,
+                envelope: { attack: 0.01, decay: 0.4, sustain: 0, release: 0.2 }
+            }).toDestination();
+
             // Ability Synths
             synths.falconStoop = new Tone.NoiseSynth({
                 volume: 0,
@@ -390,6 +405,7 @@
             synths.crowAbility = new Tone.NoiseSynth({ volume: -5, noise: {type: 'pink'}, envelope: {attack: 0.1, decay: 0.5, sustain: 0}}).toDestination();
             synths.woodpeckerAbility = new Tone.NoiseSynth({ volume: -10, noise: {type: 'white', playbackRate: 10}, envelope: {attack: 0.01, decay: 0.1, sustain: 0.1, release: 0.1}}).toDestination();
             synths.phoenixAbility = new Tone.Synth({ volume: -5, oscillator: {type: 'sine'}, envelope: {attack: 0.5, decay: 1.5, sustain: 0.3, release: 1}}).toDestination();
+            synths.shoebillAbility = new Tone.Synth({ volume: -8, oscillator: {type: 'square'}, envelope: {attack: 0.3, decay: 0.8, sustain: 0.2, release: 0.5}}).toDestination();
 
 
             // --- Music Loop ---
@@ -669,6 +685,66 @@
                     shockwaves.push(createShockwave(player.x, player.y, 150, 40));
                     addScreenShake(0.5);
                 }
+            },
+            shoebill: {
+                name: 'shoebill',
+                emoji: '🦤',
+                size: 24,
+                speed: 220, // Slowest bird
+                maxHealth: 160, // Tankiest bird
+                weapon: {
+                    fireRate: 1.4, // Very slow
+                    bulletSpeed: 600,
+                    damage: 90, // Massive damage
+                    spread: 0,
+                    color: '#00ffcc', // Teal
+                    size: 14, // Large projectile
+                    isPiercing: true, // Goes through enemies
+                    range: 700
+                },
+                ability: {
+                    cooldown: 14,
+                    duration: 3,
+                },
+                onAbility: (player) => {
+                    player.isStaring = true;
+                    synths.shoebillAbility.triggerAttackRelease('D2', '2');
+                    // Create menacing eye effect
+                    createParticles(player.x, player.y, 20, '#ff0000', 80, 5);
+                    addScreenShake(0.3);
+                },
+                updateAbility: (player, delta) => {
+                    if (player.isStaring) {
+                        // Stun enemies in a cone in front of player
+                        const stareRange = 350;
+                        const stareAngle = 0.8; // ~45 degrees each side
+                        
+                        for (const e of enemies) {
+                            const dist = getDistance(player, e);
+                            if (dist < stareRange) {
+                                const angleToEnemy = Math.atan2(e.y - player.y, e.x - player.x);
+                                let angleDiff = Math.abs(angleToEnemy - mouse.angle);
+                                // Normalize angle difference
+                                if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
+                                
+                                if (angleDiff < stareAngle) {
+                                    // Enemy is in stare cone - stun them
+                                    e.isStunned = true;
+                                    e.stunTimer = 0.5; // Gets refreshed while in cone
+                                    // Visual feedback
+                                    if (Math.random() < 0.1) {
+                                        createParticles(e.x, e.y, 2, '#ffff00', 30, 3);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                endAbility: (player) => {
+                    player.isStaring = false;
+                    // Final intimidation burst
+                    createParticles(player.x, player.y, 15, '#00ffcc', 120, 6);
+                }
             }
         };
 
@@ -804,7 +880,8 @@
                 pelican: '🦢',
                 crow: '🐦‍⬛',
                 woodpecker: '🐦',
-                phoenix: '🔥'
+                phoenix: '🔥',
+                shoebill: '🦤'
             };
             return emojis[birdName] || '🐦';
         }
@@ -1260,17 +1337,29 @@
                     }
                 } else {
                     // Player bullet collisions with enemies
+                    let bulletDestroyed = false;
                     for (let j = enemies.length - 1; j >= 0; j--) {
                         const e = enemies[j];
                         if (isColliding(b, e)) {
-                            bullets.splice(i, 1);
+                            // Track enemies hit by piercing bullets
+                            if (!b.hitEnemies) b.hitEnemies = new Set();
+                            if (b.hitEnemies.has(e)) continue;
+                            b.hitEnemies.add(e);
+                            
                             enemyHit(e, b.damage, j);
                             if (b.isExplosive) {
                                 createShockwave(b.x, b.y, b.explosionRadius, b.damage);
                             }
-                            break; // Bullet can only hit one enemy
+                            
+                            // Piercing bullets continue through enemies
+                            if (!b.isPiercing) {
+                                bullets.splice(i, 1);
+                                bulletDestroyed = true;
+                                break;
+                            }
                         }
                     }
+                    if (bulletDestroyed) continue;
                 }
             }
         }
@@ -1278,6 +1367,15 @@
         function updateEnemies(delta) {
             for (let i = enemies.length - 1; i >= 0; i--) {
                 const e = enemies[i];
+                
+                // Handle stun timer
+                if (e.isStunned) {
+                    e.stunTimer -= delta;
+                    if (e.stunTimer <= 0) {
+                        e.isStunned = false;
+                    }
+                    continue; // Skip movement and shooting while stunned
+                }
                 
                 // Determine target
                 let targetX = player.x;
@@ -1537,6 +1635,22 @@
             // Draw Enemies
             for (const e of enemies) {
                 if (!e) continue; // <-- ADDED SAFETY CHECK
+                
+                // Visual effect for stunned enemies
+                if (e.isStunned) {
+                    ctx.save();
+                    ctx.globalAlpha = 0.5;
+                    ctx.fillStyle = '#ffff00';
+                    ctx.beginPath();
+                    ctx.arc(e.x, e.y, e.size + 5, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                    
+                    // Draw stun stars
+                    ctx.font = '12px sans-serif';
+                    ctx.fillText('💫', e.x - 10, e.y - e.size - 5);
+                }
+                
                 ctx.font = `${e.size * 1.5}px sans-serif`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
@@ -1590,6 +1704,39 @@
                 ctx.arc(0, 0, 100, -0.6, 0.6);
                 ctx.closePath();
                 ctx.fill();
+                ctx.restore();
+            }
+
+            // Draw Shoebill Death Stare effect
+            if (player.isStaring) {
+                ctx.save();
+                ctx.translate(player.x, player.y);
+                ctx.rotate(mouse.angle);
+                
+                // Create gradient for menacing stare effect
+                const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 350);
+                gradient.addColorStop(0, 'rgba(255, 0, 0, 0.4)');
+                gradient.addColorStop(0.5, 'rgba(255, 50, 0, 0.2)');
+                gradient.addColorStop(1, 'rgba(255, 100, 0, 0)');
+                
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.arc(0, 0, 350, -0.8, 0.8);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Draw menacing eye lines
+                ctx.strokeStyle = 'rgba(255, 0, 0, 0.6)';
+                ctx.lineWidth = 2;
+                for (let i = 0; i < 5; i++) {
+                    const lineAngle = -0.6 + (i * 0.3);
+                    ctx.beginPath();
+                    ctx.moveTo(20, 0);
+                    ctx.lineTo(Math.cos(lineAngle) * 300, Math.sin(lineAngle) * 300);
+                    ctx.stroke();
+                }
+                
                 ctx.restore();
             }
 
